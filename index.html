@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק זיכרון מתמטי</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.6.0/confetti.browser.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f8ff;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            min-height: 100vh;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            margin: 0.5rem 0;
+        }
+        
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+        
+        .difficulty-selector {
+            margin: 15px 0;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .difficulty-btn {
+            font-size: 1rem;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        
+        .difficulty-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .difficulty-btn.active {
+            background-color: #27ae60;
+        }
+        
+        .game-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+            gap: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        
+        @media (min-width: 480px) {
+            .game-container {
+                grid-template-columns: repeat(5, 90px);
+                justify-content: center;
+            }
+        }
+        
+        .card {
+            width: 100%;
+            height: 120px;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+        
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+        }
+        
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 5px;
+        }
+        
+        @media (max-width: 480px) {
+            .card-front, .card-back {
+                font-size: 1rem;
+            }
+        }
+        
+        .card-front {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .card-back {
+            background-color: white;
+            transform: rotateY(180deg);
+        }
+        
+        .card.matched .card-back {
+            background-color: #e8f5e9;
+        }
+        
+        .error-message {
+            color: red;
+            font-size: 1.2rem;
+            margin-top: 15px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .score {
+            font-size: 1.3rem;
+            margin: 15px 0;
+            color: #2c3e50;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .shake {
+            animation: shake 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <h1>משחק זיכרון מתמטי</h1>
+    <div class="difficulty-selector">
+        <button class="difficulty-btn" onclick="setDifficulty('easy')">קל</button>
+        <button class="difficulty-btn" onclick="setDifficulty('medium')">בינוני</button>
+        <button class="difficulty-btn" onclick="setDifficulty('hard')">קשה</button>
+    </div>
+    <div class="score">ניקוד: <span id="score">0</span></div>
+    <div class="game-container" id="gameContainer"></div>
+    <div class="error-message" id="errorMessage">טעות! נסה שוב</div>
+
+    <script>
+        let score = 0;
+        let currentDifficulty = null;
+        
+        function setDifficulty(difficulty) {
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            event.target.classList.add('active');
+            
+            currentDifficulty = difficulty;
+            score = 0;
+            document.getElementById('score').textContent = '0';
+            initializeGame(difficulty);
+        }
+
+        function generateExercises(difficulty) {
+            const exercises = [];
+            const results = new Set();
+            let maxNum, operations;
+            
+            switch(difficulty) {
+                case 'easy':
+                    maxNum = 10;
+                    operations = ['+'];
+                    break;
+                case 'medium':
+                    maxNum = 15;
+                    operations = ['+', '*'];
+                    break;
+                case 'hard':
+                    maxNum = 20;
+                    operations = ['+', '*', '/'];
+                    break;
+            }
+            
+            while (exercises.length < 5) {
+                const operation = operations[Math.floor(Math.random() * operations.length)];
+                let num1, num2, result;
+                
+                do {
+                    if (operation === '/') {
+                        num2 = Math.floor(Math.random() * 9) + 2; // 2-10
+                        num1 = num2 * (Math.floor(Math.random() * 5) + 1); // Ensure division results in whole number
+                    } else {
+                        num1 = Math.floor(Math.random() * maxNum) + 1;
+                        num2 = Math.floor(Math.random() * maxNum) + 1;
+                        
+                        // For subtraction, ensure result is positive
+                        if (operation === '-' && num1 < num2) {
+                            [num1, num2] = [num2, num1];
+                        }
+                    }
+                    
+                    switch(operation) {
+                        case '+': result = num1 + num2; break;
+                        case '*': result = num1 * num2; break;
+                        case '/': result = num1 / num2; break;
+                    }
+                } while (
+                    results.has(result) || 
+                    result > maxNum * (operation === '*' ? 2 : 1) ||
+                    (operation === '/' && num1 % num2 !== 0)
+                );
+                
+                results.add(result);
+                exercises.push({
+                    expression: `${num1} ${operation} ${num2}`,
+                    result: result
+                });
+            }
+
+            return exercises;
+        }
+
+        function createCard(content, result, isExpression) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.setAttribute('data-result', result);
+            
+            card.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-front">?</div>
+                    <div class="card-back">${content}</div>
+                </div>
+            `;
+            
+            card.addEventListener('click', flipCard);
+            return card;
+        }
+
+        function flipCard() {
+            if (this.classList.contains('matched') || this.classList.contains('flipped')) return;
+            this.classList.add('flipped');
+            checkForMatches();
+        }
+
+        function checkForMatches() {
+            const flippedCards = document.querySelectorAll('.card.flipped:not(.matched)');
+            
+            if (flippedCards.length === 2) {
+                const [card1, card2] = flippedCards;
+                
+                if (card1.getAttribute('data-result') === card2.getAttribute('data-result')) {
+                    handleMatch(card1, card2);
+                } else {
+                    handleMismatch(card1, card2);
+                }
+            }
+        }
+
+        function handleMatch(card1, card2) {
+            card1.classList.add('matched');
+            card2.classList.add('matched');
+            
+            score += 10;
+            document.getElementById('score').textContent = score;
+            
+            confetti({
+                particleCount: 50,
+                spread: 45,
+                origin: { y: 0.6 }
+            });
+
+            checkGameCompletion();
+        }
+
+        function handleMismatch(card1, card2) {
+            card1.classList.add('shake');
+            card2.classList.add('shake');
+            
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.opacity = '1';
+            
+            setTimeout(() => {
+                card1.classList.remove('flipped', 'shake');
+                card2.classList.remove('flipped', 'shake');
+                errorMessage.style.opacity = '0';
+            }, 1500);
+        }
+
+        function checkGameCompletion() {
+            const allCards = document.querySelectorAll('.card');
+            const matchedCards = document.querySelectorAll('.matched');
+            
+            if (allCards.length === matchedCards.length) {
+                setTimeout(() => {
+                    alert('כל הכבוד! סיימת את המשחק!\nהניקוד שלך: ' + score);
+                    initializeGame(currentDifficulty);
+                }, 1000);
+            }
+        }
+
+        function initializeGame(difficulty) {
+            const gameContainer = document.getElementById('gameContainer');
+            gameContainer.innerHTML = '';
+            
+            const exercises = generateExercises(difficulty);
+            const cards = [];
+            
+            exercises.forEach(exercise => {
+                cards.push(
+                    createCard(exercise.expression, exercise.result, true),
+                    createCard(exercise.result, exercise.result, false)
+                );
+            });
+            
+            for (let i = cards.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cards[i], cards[j]] = [cards[j], cards[i]];
+            }
+            
+            cards.forEach(card => gameContainer.appendChild(card));
+        }
+    </script>
+</body>
+</html>
